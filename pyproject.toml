@@ -1,0 +1,32 @@
+[project]
+name = "decision-kernel-core"
+version = "0.1.0"
+description = "The sole decision authority of the Decision OS: deterministic engine, cryptographic authority (Ed25519), signed one-time capability tokens. Depends only on contracts-spec + cryptography."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "PolyForm-Noncommercial-1.0.0" }
+authors = [{ name = "Ali Pourrahim" }]
+# The kernel's authority is cryptographic — Ed25519 is a genuine RUNTIME need,
+# not optional. This is the one dependency; nothing from research/agent layers.
+dependencies = ["cryptography>=42"]
+
+[project.optional-dependencies]
+dev = ["jsonschema>=4.0", "pytest>=8.0", "ruff>=0.6", "mypy>=1.11"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

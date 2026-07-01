@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts-spec/decision-os/decision.schema.json",
+  "title": "Decision",
+  "description": "The SINGLE decision contract — the OUTPUT of the kernel. Exactly one repo (decision-kernel-core) may emit an instance of this. control-plane, fdk-research, and agent-runtime MUST NOT. This is the most safety-critical schema in the system.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "reason", "action_ref", "issued_by"],
+  "properties": {
+    "verdict": {
+      "type": "string",
+      "enum": ["ALLOW", "DENY", "LIMIT", "CONTAIN", "DEFER"],
+      "description": "ALLOW = permit as submitted. DENY = refuse. LIMIT = permit only a constrained/minimized form (see obligations/transformed_payload); canonical name for AuthGate's TRANSFORM. CONTAIN = permit ONLY inside a locked-down sandbox (see 'containment') — the defensive response to a suspected-malicious actor: its effect is nullified WITHIN this system's own boundary. DEFER = cannot decide now; escalate. Note: CONTAIN is strictly INTERNAL containment; the Decision OS never acts on, breaks into, or disables an external system (see DEPENDENCY_RULES.md, 'no external enforcement')."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Deterministic, human-readable justification. No probability, no ML narrative."
+    },
+    "action_ref": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Binds this decision to the exact action it rules on (the action's nonce or a content hash). A decision is only valid for the action_ref it names."
+    },
+    "issued_by": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identity of the AUTHORITY that produced this decision. MUST be the decision-kernel-core. CI/runtime rejects a decision whose issued_by is not the kernel."
+    },
+    "obligations": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "For LIMIT: the constraints applied (e.g. 'redacted:ssn', 'redacted:content:pattern'). Empty for ALLOW/DENY/DEFER."
+    },
+    "transformed_payload": {
+      "type": ["object", "null"],
+      "default": null,
+      "description": "For LIMIT only: the minimized payload the executor must use instead of the original. Null otherwise."
+    },
+    "containment": {
+      "type": ["object", "null"],
+      "default": null,
+      "description": "Required when verdict=CONTAIN. The sandbox constraints the executor MUST apply. All are INTERNAL limits on this system's own execution domain — none reach outside it.",
+      "additionalProperties": false,
+      "properties": {
+        "sandbox": {
+          "type": "boolean",
+          "const": true,
+          "description": "The action runs only in an isolated sandbox."
+        },
+        "network": {
+          "type": "string",
+          "enum": ["none", "restricted"],
+          "description": "Network access inside the sandbox: none, or a restricted allowlist."
+        },
+        "allowed_tools": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Whitelist of tools the contained actor may still call (typically empty/minimal — no sensitive effects)."
+        },
+        "persistence": {
+          "type": "boolean",
+          "const": false,
+          "description": "The contained actor may not persist state beyond the sandbox."
+        },
+        "privilege_escalation": {
+          "type": "boolean",
+          "const": false,
+          "description": "No privilege escalation is permitted from within containment."
+        },
+        "time_limit_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Wall-clock bound on the contained execution."
+        }
+      },
+      "required": ["sandbox", "network", "persistence", "privilege_escalation", "time_limit_seconds"]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the decision was issued (RFC3339/ISO-8601 UTC)."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "verdict": { "const": "LIMIT" } } },
+      "then": { "required": ["obligations"] }
+    },
+    {
+      "if": { "properties": { "verdict": { "const": "CONTAIN" } } },
+      "then": { "required": ["containment"] }
+    }
+  ]
+}

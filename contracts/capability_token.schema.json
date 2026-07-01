@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts-spec/decision-os/capability_token.schema.json",
+  "title": "CapabilityToken",
+  "description": "The one-time credential the kernel mints on a permitting decision (ALLOW/LIMIT). The executor MUST refuse to perform an effect without a valid, unexpired, matching token. This is the mechanism that makes mediation MANDATORY: a caller cannot execute by bypassing the kernel, because it cannot forge the kernel's signature.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["token_id", "actor", "capability", "action_ref", "issued_by", "expires_at", "signature"],
+  "properties": {
+    "token_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique id; single-use. The executor records spent token_ids to prevent replay."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The actor this token authorizes."
+    },
+    "capability": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The exact capability granted, e.g. 'tool:send_email'."
+    },
+    "action_ref": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Binds the token to a single action (matches the Decision.action_ref). A token for one action cannot authorize another."
+    },
+    "issued_by": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The minting authority — the decision-kernel-core. No other component may mint tokens."
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Expiry (RFC3339 UTC). A short TTL bounds the replay window."
+    },
+    "signature": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Signature (e.g. Ed25519 hex) over the token's canonical form, by a key held ONLY by the kernel. This is what a bypassing caller cannot forge."
+    }
+  }
+}

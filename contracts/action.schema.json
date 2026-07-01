@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts-spec/decision-os/action.schema.json",
+  "title": "Action",
+  "description": "The domain-agnostic unit of intent submitted to the Decision OS. This is the INPUT to the kernel. A domain adapter turns a raw event (MCP tool call, robot command, transaction) into exactly this shape. Mirrors the AuthGate Action ABI v1.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["actor", "tool", "action_purpose", "abi_version"],
+  "properties": {
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who is acting, e.g. 'agent:support-bot'. Normalized (NFKC, control-stripped, casefolded) at the trust boundary."
+    },
+    "tool": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The tool/effect to invoke, e.g. 'send_email'."
+    },
+    "action_purpose": {
+      "type": "string",
+      "minLength": 1,
+      "description": "WHY this call happens, e.g. 'support_reply'. Bound to the data purposes it may serve."
+    },
+    "data_labels": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Provenance/purpose labels of the data used in this call. Self-attached; the kernel does not trust them as ground truth without corroboration."
+    },
+    "payload": {
+      "type": "object",
+      "default": {},
+      "description": "Concrete arguments handed to the tool. Opaque to the contract; screened/redacted by policy."
+    },
+    "session_id": {
+      "type": "string",
+      "default": "default",
+      "description": "Groups a multi-step trajectory for the runtime/temporal layer. Normalized like every other token, so look-alikes cannot fork a fresh session."
+    },
+    "nonce": {
+      "type": "string",
+      "default": "",
+      "description": "Unique per action; enables replay rejection. An empty nonce opts out of replay protection and is never recorded."
+    },
+    "capability": {
+      "type": "string",
+      "default": "",
+      "description": "The capability this call requests. Defaults to 'tool:<tool>' when empty."
+    },
+    "abi_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "The packet ABI version. A gate speaking a different version must reject the packet."
+    }
+  }
+}
