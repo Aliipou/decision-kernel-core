@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "decision-kernel-core"
 version = "0.1.0"
@@ -12,6 +16,9 @@ dependencies = ["cryptography>=42"]
 
 [project.optional-dependencies]
 dev = ["jsonschema>=4.0", "pytest>=8.0", "ruff>=0.6", "mypy>=1.11"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["kernel"]
 
 [tool.ruff]
 line-length = 100
