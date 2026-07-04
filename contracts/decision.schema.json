@@ -82,6 +82,11 @@
       "type": "string",
       "format": "date-time",
       "description": "When the decision was issued (RFC3339/ISO-8601 UTC)."
+    },
+    "action_binding": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Content fingerprint (sha256 hex) committing this decision to the SECURITY-RELEVANT content of the action it rules on (actor, capability, action_purpose, data_labels, payload) — not merely the action_ref. The executor recomputes it from the action it is about to run and refuses on mismatch, so a valid decision/token cannot be re-attached to a different (e.g. denied) action. Closes the confused-deputy gap."
     }
   },
   "allOf": [

@@ -3,12 +3,32 @@ from __future__ import annotations
 from kernel import KernelAuthority, TokenStore, mint_token
 
 
-def _mint(a: KernelAuthority, ttl: float = 30.0) -> dict:
-    return mint_token(a, actor="agent:x", capability="tool:send", action_ref="n-1", ttl_seconds=ttl)
+def _mint(a: KernelAuthority, ttl: float = 30.0, binding: str = "fp-1") -> dict:
+    return mint_token(
+        a,
+        actor="agent:x",
+        capability="tool:send",
+        action_ref="n-1",
+        action_binding=binding,
+        ttl_seconds=ttl,
+    )
 
 
-def _spend(store: TokenStore, tok: dict, pub: str, ref: str = "n-1", cap: str = "tool:send"):
-    return store.verify_and_spend(tok, kernel_public_key_hex=pub, expected_action_ref=ref, expected_capability=cap)
+def _spend(
+    store: TokenStore,
+    tok: dict,
+    pub: str,
+    ref: str = "n-1",
+    cap: str = "tool:send",
+    binding: str = "fp-1",
+):
+    return store.verify_and_spend(
+        tok,
+        kernel_public_key_hex=pub,
+        expected_action_ref=ref,
+        expected_capability=cap,
+        expected_action_binding=binding,
+    )
 
 
 def test_verify_and_spend_once() -> None:
@@ -31,6 +51,14 @@ def test_wrong_capability_rejected() -> None:
     a = KernelAuthority.generate()
     ok, why = _spend(TokenStore(), _mint(a), a.public_key_hex(), cap="tool:other")
     assert not ok and "capability" in why
+
+
+def test_wrong_action_binding_rejected() -> None:
+    # A valid token re-presented for a DIFFERENT action (different fingerprint)
+    # must be refused — this is the confused-deputy defense.
+    a = KernelAuthority.generate()
+    ok, why = _spend(TokenStore(), _mint(a, binding="fp-1"), a.public_key_hex(), binding="fp-2")
+    assert not ok and "action_binding" in why
 
 
 def test_bad_signature_rejected() -> None:

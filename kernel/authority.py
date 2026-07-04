@@ -20,6 +20,7 @@ Depends on `cryptography` (Ed25519).
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,30 @@ def canonical_bytes(obj: dict[str, Any]) -> bytes:
     excluding any `signature` field already present."""
     payload = {k: v for k, v in obj.items() if k != "signature"}
     return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def action_fingerprint(action: dict[str, Any]) -> str:
+    """A hash committing to the security-relevant content of an action.
+
+    The kernel folds this into every signed Decision and token; the executor
+    recomputes it from the action it is about to run and refuses on mismatch. This
+    is what closes the confused-deputy gap: a signed decision authorizes THIS
+    action's content, not merely a (nonce, capability) pair that an attacker can
+    re-attach to a different action.
+
+    Normalized over exactly the fields the kernel's ruling depends on. The
+    capability is derived the same way the engine derives it (`capability` field,
+    else `tool:<tool>`), so the raw `tool` field cannot diverge from what is
+    bound. Deterministic (sorted keys, sorted labels)."""
+    normalized = {
+        "actor": action.get("actor", ""),
+        "capability": action.get("capability") or f"tool:{action.get('tool', '')}",
+        "action_purpose": action.get("action_purpose", ""),
+        "data_labels": sorted(action.get("data_labels") or []),
+        "payload": action.get("payload") or {},
+    }
+    canonical = json.dumps(normalized, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 class KernelAuthority:

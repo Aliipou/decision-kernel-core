@@ -24,15 +24,22 @@ def mint_token(
     actor: str,
     capability: str,
     action_ref: str,
+    action_binding: str,
     ttl_seconds: float = 30.0,
 ) -> dict[str, Any]:
     """Mint a signed, single-use capability token. Returns the token dict with a
-    `signature` field (the mechanism a bypassing caller cannot forge)."""
+    `signature` field (the mechanism a bypassing caller cannot forge).
+
+    `action_binding` is the fingerprint of the security-relevant action content
+    (see authority.action_fingerprint). Binding it here means the token authorizes
+    THIS action, not merely a (nonce, capability) pair — closing the confused
+    deputy where a valid token is re-attached to a different action."""
     token = {
         "token_id": f"tok-{uuid.uuid4().hex[:12]}",
         "actor": actor,
         "capability": capability,
         "action_ref": action_ref,
+        "action_binding": action_binding,
         "issued_by": KERNEL_IDENTITY,
         "expires_at": (datetime.now(UTC) + timedelta(seconds=ttl_seconds)).isoformat(),
     }
@@ -53,6 +60,7 @@ class TokenStore:
         kernel_public_key_hex: str,
         expected_action_ref: str,
         expected_capability: str,
+        expected_action_binding: str,
     ) -> tuple[bool, str]:
         """Verify a token and consume it. Returns (ok, reason). Fails closed on
         bad signature/identity, expiry, mismatch, or reuse."""
@@ -63,6 +71,8 @@ class TokenStore:
             return False, "token action_ref does not match the action being executed"
         if token.get("capability") != expected_capability:
             return False, "token capability does not match the effect being executed"
+        if token.get("action_binding") != expected_action_binding:
+            return False, "token action_binding does not match the action being executed"
         try:
             expires = datetime.fromisoformat(token["expires_at"])
         except (KeyError, ValueError):

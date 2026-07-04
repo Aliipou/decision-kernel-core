@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .authority import KernelAuthority
+from .authority import KernelAuthority, action_fingerprint
 from .decision import PERMITTING, Decision, Verdict
 from .token import mint_token
 
@@ -53,22 +53,27 @@ class Kernel:
         ref = action.get("nonce") or action.get("action_ref") or ""
         capability = action.get("capability") or f"tool:{action.get('tool', '')}"
 
+        # 0. Ambiguity: if BOTH capability and tool are given they must agree.
+        #    Otherwise the audited/authorized tool could diverge from the executed
+        #    one (capability says send_email while tool says read_docs). Reject
+        #    rather than silently prefer one.
+        tool = action.get("tool")
+        if action.get("capability") and tool and action["capability"] != f"tool:{tool}":
+            return Decision(
+                Verdict.DENY,
+                f"ambiguous action: capability '{action['capability']}' != tool '{tool}'",
+                ref,
+            )
+
         # 1. Capability: the actor must hold the requested capability.
         if not _has_capability(self._grants.get(actor, []), capability):
             return Decision(Verdict.DENY, f"actor '{actor}' lacks capability '{capability}'", ref)
 
-        # 2. Containment: a suspected-malicious actor (advisory) runs only sandboxed.
-        #    Deterministic policy mapping — never an ML choice.
-        if threat_class in self._contain_classes:
-            return Decision(
-                Verdict.CONTAIN,
-                f"threat class '{threat_class}' -> internal sandbox containment",
-                ref,
-                obligations=("sandboxed", "network:none", "no-persistence"),
-                containment=dict(_CONTAINMENT),
-            )
-
-        # 3. Purpose binding: each data label's purpose must permit this action.
+        # 2. Purpose binding: each data label's purpose must permit this action.
+        #    A hard DENY here must DOMINATE containment: an unauthorized action is
+        #    denied outright, not sandbox-run. (Advisory input must never loosen a
+        #    verdict — checking containment before this gate would turn a DENY into
+        #    a CONTAIN, which is strictly more permissive.)
         for label in action.get("data_labels", []):
             allowed = self._bindings.get(label)
             if allowed is None:
@@ -83,6 +88,19 @@ class Kernel:
                     f"purpose mismatch: '{label}' may not serve '{action.get('action_purpose')}'",
                     ref,
                 )
+
+        # 3. Containment: an otherwise-permitted action from a suspected-malicious
+        #    actor (advisory) runs only sandboxed. Applied AFTER the hard-deny
+        #    gates so containment can only tighten a would-be ALLOW/LIMIT, never
+        #    loosen a DENY. Deterministic policy mapping — never an ML choice.
+        if threat_class in self._contain_classes:
+            return Decision(
+                Verdict.CONTAIN,
+                f"threat class '{threat_class}' -> internal sandbox containment",
+                ref,
+                obligations=("sandboxed", "network:none", "no-persistence"),
+                containment=dict(_CONTAINMENT),
+            )
 
         # 4. Data minimization -> LIMIT.
         payload = dict(action.get("payload", {}))
@@ -114,6 +132,11 @@ class Kernel:
         signed. Both are verifiable with `public_key_hex()`."""
         decision = self._evaluate(action, threat_class)
         decision_dict = decision.to_dict()
+        # Bind the decision to the security-relevant content of THIS action, then
+        # sign over the binding too. The executor recomputes it and refuses if the
+        # action it is handed does not match — closing the confused-deputy gap.
+        binding = action_fingerprint(action)
+        decision_dict["action_binding"] = binding
         signature = self._authority.sign(decision_dict)
         token = None
         if decision.verdict in PERMITTING:
@@ -122,5 +145,6 @@ class Kernel:
                 actor=action.get("actor", ""),
                 capability=action.get("capability") or f"tool:{action.get('tool', '')}",
                 action_ref=decision.action_ref,
+                action_binding=binding,
             )
         return {"decision": decision_dict, "signature": signature, "token": token}

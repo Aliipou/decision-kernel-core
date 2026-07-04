@@ -5,7 +5,7 @@
   "description": "The one-time credential the kernel mints on a permitting decision (ALLOW/LIMIT). The executor MUST refuse to perform an effect without a valid, unexpired, matching token. This is the mechanism that makes mediation MANDATORY: a caller cannot execute by bypassing the kernel, because it cannot forge the kernel's signature.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["token_id", "actor", "capability", "action_ref", "issued_by", "expires_at", "signature"],
+  "required": ["token_id", "actor", "capability", "action_ref", "action_binding", "issued_by", "expires_at", "signature"],
   "properties": {
     "token_id": {
       "type": "string",
@@ -26,6 +26,11 @@
       "type": "string",
       "minLength": 1,
       "description": "Binds the token to a single action (matches the Decision.action_ref). A token for one action cannot authorize another."
+    },
+    "action_binding": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Content fingerprint (sha256 hex) matching the Decision.action_binding — commits the token to the security-relevant action CONTENT, not just the action_ref. The executor recomputes it and refuses a token re-presented for a different action."
     },
     "issued_by": {
       "type": "string",
