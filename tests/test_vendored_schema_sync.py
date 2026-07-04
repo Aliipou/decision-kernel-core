@@ -13,8 +13,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import decision_os_contracts as contracts
 import pytest
+
+# The kernel deliberately VENDORS the schemas so it has no runtime dependency on
+# the contracts package; that package is a test-only guard here. Where it isn't
+# installed (the minimal kernel CI), skip — the drift guard still runs on dev
+# machines and in the integration harness, which install decision-os-contracts.
+contracts = pytest.importorskip(
+    "decision_os_contracts",
+    reason="decision-os-contracts not installed; drift guard enforced where it is",
+)
 
 _VENDORED = Path(__file__).resolve().parent.parent / "contracts"
 _SCHEMAS = ["decision", "capability_token", "action"]
