@@ -8,18 +8,27 @@ of the single-authority rule.
 from .authority import (
     KERNEL_IDENTITY,
     KernelAuthority,
+    UnfingerprintablePayload,
     action_fingerprint,
     verify,
     verify_authority,
 )
 from .decision import PERMITTING, Decision, Verdict
 from .engine import Kernel
+from .spentstore import (
+    FileSpentStore,
+    InMemorySpentStore,
+    SpentStore,
+    SpentStoreUnavailable,
+    SqliteSpentStore,
+)
 from .token import TokenStore, mint_token
 
 __all__ = [
     "KERNEL_IDENTITY",
     "KernelAuthority",
     "action_fingerprint",
+    "UnfingerprintablePayload",
     "verify",
     "verify_authority",
     "Decision",
@@ -28,4 +37,9 @@ __all__ = [
     "Kernel",
     "mint_token",
     "TokenStore",
+    "SpentStore",
+    "FileSpentStore",
+    "SqliteSpentStore",
+    "InMemorySpentStore",
+    "SpentStoreUnavailable",
 ]

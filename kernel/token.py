@@ -16,6 +16,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .authority import KERNEL_IDENTITY, KernelAuthority, verify_authority
+from .spentstore import SpentStore, SpentStoreUnavailable, default_spent_store
 
 
 def mint_token(
@@ -48,10 +49,18 @@ def mint_token(
 
 
 class TokenStore:
-    """Tracks spent token_ids so a token is honored at most once."""
+    """Tracks spent token_ids so a token is honored at most once.
 
-    def __init__(self) -> None:
-        self._spent: set[str] = set()
+    HB-1: the spend record is now a DURABLE, ATOMIC :class:`SpentStore` by default
+    (file-backed, ``O_EXCL``), so a token spent by one process/replica is seen as
+    spent by another sharing the same volume. Pass ``spent_store=`` to override
+    (e.g. ``InMemorySpentStore()`` for explicit single-process use, or a
+    Redis/DB-backed store for multi-machine deployments). If the store is
+    unreachable, verify_and_spend fails CLOSED (returns not-ok), never assuming
+    the token is unspent."""
+
+    def __init__(self, spent_store: SpentStore | None = None) -> None:
+        self._spent: SpentStore = spent_store if spent_store is not None else default_spent_store()
 
     def verify_and_spend(
         self,
@@ -63,7 +72,7 @@ class TokenStore:
         expected_action_binding: str,
     ) -> tuple[bool, str]:
         """Verify a token and consume it. Returns (ok, reason). Fails closed on
-        bad signature/identity, expiry, mismatch, or reuse."""
+        bad signature/identity, expiry, mismatch, reuse, or an unreachable store."""
         sig = token.get("signature")
         if not isinstance(sig, str) or not verify_authority(token, sig, kernel_public_key_hex):
             return False, "bad or missing kernel signature"
@@ -82,7 +91,12 @@ class TokenStore:
         token_id = token.get("token_id")
         if not isinstance(token_id, str):
             return False, "missing token_id"
-        if token_id in self._spent:
+        # HB-1: atomic, durable, cross-instance spend. Fail CLOSED if the store is
+        # unreachable — never fall back to "assume unspent".
+        try:
+            first_spender = self._spent.try_spend(token_id)
+        except SpentStoreUnavailable as e:
+            return False, f"spent-store unavailable, refusing (fail-closed): {e}"
+        if not first_spender:
             return False, "token already spent (replay)"
-        self._spent.add(token_id)
         return True, "ok"

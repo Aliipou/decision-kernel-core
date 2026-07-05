@@ -42,6 +42,38 @@ def canonical_bytes(obj: dict[str, Any]) -> bytes:
     return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
+class UnfingerprintablePayload(TypeError):
+    """A payload value is not a JSON primitive, so it cannot be safely committed
+    to by the action fingerprint (W-2). Raised instead of silently coercing it
+    with ``str()`` — the coercion let an object stringifying to "100" collide with
+    the string "100", and let a mutable object be swapped after the hash."""
+
+
+def _strict_encode(value: Any, _path: str = "payload") -> Any:
+    """Return ``value`` unchanged if built only from JSON primitives, else raise
+    :class:`UnfingerprintablePayload`. Closes W-2 (default=str collision + mutate-
+    after-auth): the payload must be plain JSON data whose value at hash-time IS
+    its value at execute-time."""
+    if isinstance(value, bool) or value is None or isinstance(value, (int, float, str)):
+        return value
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for k, v in value.items():
+            if not isinstance(k, str):
+                raise UnfingerprintablePayload(
+                    f"{_path}: non-string dict key {k!r} of type {type(k).__name__}"
+                )
+            out[k] = _strict_encode(v, f"{_path}.{k}")
+        return out
+    if isinstance(value, (list, tuple)):
+        return [_strict_encode(v, f"{_path}[{i}]") for i, v in enumerate(value)]
+    raise UnfingerprintablePayload(
+        f"{_path}: value of type {type(value).__name__} is not a JSON primitive; "
+        f"payloads bound by a decision must be plain JSON data "
+        f"(str/int/float/bool/None/list/dict) - refusing to str()-coerce it"
+    )
+
+
 def action_fingerprint(action: dict[str, Any]) -> str:
     """A hash committing to the security-relevant content of an action.
 
@@ -54,15 +86,24 @@ def action_fingerprint(action: dict[str, Any]) -> str:
     Normalized over exactly the fields the kernel's ruling depends on. The
     capability is derived the same way the engine derives it (`capability` field,
     else `tool:<tool>`), so the raw `tool` field cannot diverge from what is
-    bound. Deterministic (sorted keys, sorted labels)."""
+    bound. Deterministic (sorted keys, sorted labels).
+
+    W-1: ``action_ref`` (falling back to ``nonce``) is folded in, so two actions
+    that differ ONLY by nonce no longer share a fingerprint. W-2: the payload is
+    passed through a strict encoder that REJECTS non-JSON-primitive values instead
+    of ``str()``-coercing them."""
     normalized = {
         "actor": action.get("actor", ""),
         "capability": action.get("capability") or f"tool:{action.get('tool', '')}",
         "action_purpose": action.get("action_purpose", ""),
         "data_labels": sorted(action.get("data_labels") or []),
-        "payload": action.get("payload") or {},
+        # W-1: bind the caller-supplied action reference (engine derives it the
+        # same way: nonce else action_ref).
+        "action_ref": action.get("nonce") or action.get("action_ref") or "",
+        "payload": _strict_encode(action.get("payload") or {}),
     }
-    canonical = json.dumps(normalized, sort_keys=True, separators=(",", ":"), default=str)
+    # default=str is no longer needed: _strict_encode guarantees JSON primitives.
+    canonical = json.dumps(normalized, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
