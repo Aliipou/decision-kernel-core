@@ -1,5 +1,7 @@
 # decision-kernel-core — the sole decision authority
 
+**Live (graph):** [https://ali-decision-kernel-core.vercel.app](https://ali-decision-kernel-core.vercel.app)
+
 The Decision OS kernel. Where the contract rules become **runtime reality**.
 
 - **Deterministic.** The same `(policy, action, threat_class)` always yields the
